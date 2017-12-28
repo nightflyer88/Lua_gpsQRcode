@@ -18,5 +18,4 @@ Installation:
 ![screen002](https://raw.githubusercontent.com/nightflyer88/Lua_gpsQRcode/master/img/Screen002.bmp)
 ![screen003](https://raw.githubusercontent.com/nightflyer88/Lua_gpsQRcode/master/img/Screen003.bmp)
 
-Copyright (c) 2017 by M.Lehmann
-QR-Code Generator Lib Copyright (c) 2012, Patrick Gundlach
+Copyright (c) 2017 by M.Lehmann / QR-Code Generator Lib Copyright (c) 2012, Patrick Gundlach
