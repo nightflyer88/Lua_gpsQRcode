@@ -33,6 +33,7 @@ V1.0    28.12.17    Erstversion
 local lang
 local key
 local gpsPosValid=0
+local cpu_usage=0
 
 ----------------------------------------------------------------------
 -- Locals for generating QR-code
@@ -1435,7 +1436,7 @@ local function keyForm(keyCode)
 end
 
 local function printQRcode()
-    local width, height=310,130
+    local width, height=310,126
     
     if cpu_thread == 0 then
         -- search GPS-Sensor 
@@ -1446,17 +1447,18 @@ local function printQRcode()
             if sensor.type == 9 then
                 -- GPS coordinates
                 if sensor.valGPS==0 then
-                    drawMenu=-1
-                    return
+                    break
                 end
                 local neswAscii = {"N", "E", "S", "W"}
                 local neswDez = {"", "", "-", "-"}
                 local minutes = (sensor.valGPS & 0xFFFF) * 0.001 
                 local degs = (sensor.valGPS >> 16) & 0xFF
-                local t = string.format("%s%d %f", neswDez[sensor.decimals+1], degs, minutes )
-                sensList[#sensList + 1] = string.sub(t,1,string.len(t)-3)
-                t = string.format("%s = %s' %d°%f", sensor.label, neswAscii[sensor.decimals+1],degs, minutes)
+                -- format position to display on screen
+                local t = string.format("%s = %s' %d°%f", sensor.label, neswAscii[sensor.decimals+1],degs, minutes)
                 posList[#posList + 1] = string.sub(t,1,string.len(t)-3)
+                -- format position for google-link
+                degs = degs + (minutes*1/60) -- convert to decimal degree
+                sensList[#sensList + 1] = string.format("%s%.6f", neswDez[sensor.decimals+1], degs)            
             end
         end
         if #sensList >0 then
@@ -1464,15 +1466,16 @@ local function printQRcode()
             lcd.drawText (20, 40, posList[1], FONT_NORMAL)
             lcd.drawText (20, 60, posList[2], FONT_NORMAL)
             lcd.drawText (20, 90, string.format("%s",lang.googleLink).." >>", FONT_MINI)
-            str = "http://google.com/maps?q=".. sensList[1]..",".. sensList[2].."&t=h"
+            str = "www.google.com/maps?q=".. sensList[1]..",".. sensList[2].."&t=h"
+            --str = "www.google.com/maps?q=46.979571,8.254501&t=h"
             gpsPosValid=1
             form.setButton(4,":forward",ENABLED)
         else
             lcd.drawText (20, 50, string.format("%s",lang.NOgpsPosFound), FONT_NORMAL)
             gpsPosValid=0
-        end        
-    
-    elseif cpu_thread == 10 then -- if finish calculation qr-code
+        end
+    elseif cpu_thread == 10 then 
+        -- if finish calculation qr-code
         local pixelSize = 4
 
         local modul = version*4+17
@@ -1486,14 +1489,18 @@ local function printQRcode()
         end
         
         gpsPosValid=0
-        form.setButton(4,":forward",3) --disable
+        cpu_usage = system.getCPU()
     elseif cpu_thread == -1 then
+        -- Creat QR-Code failed !
         lcd.drawText (20, 50, string.format("%s",lang.creatQRcodeFailed), FONT_NORMAL)
-    elseif cpu_thread >= 1 then -- if finish calculation qr-code
+    elseif cpu_thread >= 1 then 
+        -- QR-Code is created
+        form.setButton(4,":forward",3) --disable
         local statusPercent = cpu_thread/8*100
         local t = string.format("%d", statusPercent )
-        lcd.drawText (20, 50, string.format("%s",lang.creatQRcode).."... ".. t.. "%", FONT_NORMAL)
+        lcd.drawText (40, 50, string.format("%s",lang.creatQRcode).."... ".. t.. "%", FONT_NORMAL)
     end
+    lcd.drawText (80, 132, "CPU:".. cpu_usage.."%  Memory: ".. string.format("%.4f",collectgarbage("count")).."Kb", FONT_MINI)
 end
 
 -------------------------------------------------------------------------------------
@@ -1509,211 +1516,227 @@ end
 -- Loop
 
 local function loop()
-        
-    if cpu_thread == 1 then
+    repeat    
+        if cpu_thread == 1 then
 
-        local len_bitstring
-        version,ec_level,data_raw,mode,len_bitstring = get_version_eclevel_mode_bistringlength(str)
-        
-        data_raw = data_raw .. len_bitstring
-        data_raw = data_raw .. encode_data(str,mode)
-        data_raw = add_pad_data(version,ec_level,data_raw)
-    
-        ------------------------------------------------------
-        -- begin arrange data
-        blocks = ecblocks[version][ec_level]
-        count = 1
-        pos = 0
-        cpty_ec_bits = 0
-        
-        -- init for loop
-        count_i=1
-        count_j=1
-        
-        cpu_thread = 2
-    elseif cpu_thread == 2 then
-        
-        size_datablock_bytes = blocks[2*count_i][2]
-		num_ec_codewords = blocks[2*count_i][1] - blocks[2*count_i][2]
-		cpty_ec_bits = cpty_ec_bits + num_ec_codewords * 8
-		datablocks[#datablocks + 1] = string.sub(data_raw, pos * 8 + 1,( pos + size_datablock_bytes)*8)
-        
-        ------------------------------------------------------
-        -- begin EC calculation
-        if type(data_raw)=="string" then
-		  mp = convert_bitstring_to_bytes(data_raw)
-        end
-     
-        len_message = #mp
-        highest_exponent = len_message + num_ec_codewords - 1
-        
-        -- create message shifted to left (highest exponent)
-        for i=1,len_message do
-            mp_int[highest_exponent - i + 1] = mp[i]
-        end
-        for i=1,highest_exponent - len_message do
-            mp_int[i] = 0
-        end
-        mp_int[0] = 0
+            datablocks = {}
+            local_ecblocks = {}
+            mp = {}
+            gp_int = {}
+            mp_int,mp_alpha = {},{}
 
-        mp_alpha = convert_to_alpha(mp_int)
-        
-        cpu_thread = 3       
-    elseif cpu_thread == 3 then
-        ------------------------------------------------------
-        -- loop EC calculation
-        
-		gp_alpha = get_generator_polynominal_adjusted(num_ec_codewords,highest_exponent)
+            local len_bitstring
+            version,ec_level,data_raw,mode,len_bitstring = get_version_eclevel_mode_bistringlength(str)
 
-		-- Multiply generator polynomial by first coefficient of the above polynomial
+            data_raw = data_raw .. len_bitstring
+            data_raw = data_raw .. encode_data(str,mode)
+            data_raw = add_pad_data(version,ec_level,data_raw)
 
-		-- take the highest exponent from the message polynom (alpha) and add
-		-- it to the generator polynom
-		local exp = mp_alpha[highest_exponent]
-		for i=highest_exponent,highest_exponent - num_ec_codewords,-1 do
-			if gp_alpha[i] + exp > 255 then
-				gp_alpha[i] = math.fmod(gp_alpha[i] + exp,255)
-			else
-				gp_alpha[i] = gp_alpha[i] + exp
-			end
-		end
-		for i=highest_exponent - num_ec_codewords - 1,0,-1 do
-			gp_alpha[i] = 0
-		end
+            ------------------------------------------------------
+            -- begin arrange data
+            blocks = ecblocks[version][ec_level]
+            count = 1
+            pos = 0
+            cpty_ec_bits = 0
 
-		gp_int = convert_to_int(gp_alpha)
-		mp_int = convert_to_int(mp_alpha)
-
-
-		tmp = {}
-		for i=highest_exponent,0,-1 do
-			tmp[i] = bit_xor(gp_int[i],mp_int[i])
-		end
-		-- remove leading 0's
-		he = highest_exponent
-		for i=he,0,-1 do
-			-- We need to stop if the length of the codeword is matched
-			if i < num_ec_codewords then break end
-			if tmp[i] == 0 then
-				tmp[i] = nil
-				highest_exponent = highest_exponent - 1
-			else
-				break
-			end
-		end
-		mp_int = tmp
-		mp_alpha = convert_to_alpha(mp_int)
-        
-        
-        if highest_exponent < num_ec_codewords then
-            cpu_thread = 4
-        end
-    elseif cpu_thread == 4 then
-        ------------------------------------------------------
-        -- finish EC calculation
-        
-        local ret = {}
-
-        -- reverse data
-        for i=#mp_int,0,-1 do
-            ret[#ret + 1] = mp_int[i]
-        end
-        
-        local tmp_str = ""
-        for x=1,#ret do
-            tmp_str = tmp_str .. binary(ret[x],8)
-        end
-        
-        local_ecblocks[#local_ecblocks + 1] = tmp_str
-        pos = pos + size_datablock_bytes
-        count = count + 1
-        
-        
-        -- check for loop
-        if count_j==blocks[2*count_i - 1] then
+            -- init for loop
+            count_i=1
             count_j=1
-        else
+
             cpu_thread = 2
-            count_j=count_j+1
-            return
-        end
-        
-        if count_i==#blocks/2 then
-            cpu_thread = 5
-        else
-            cpu_thread = 2
-            count_i=count_i+1
-        end        
-    elseif cpu_thread == 5 then
-        ------------------------------------------------------
-        -- finish arrange data
-        
-        local arranged_data = ""
-        pos = 1
-        repeat
-            for i=1,#datablocks do
-                if pos < #datablocks[i] then
-                    arranged_data = arranged_data .. string.sub(datablocks[i],pos, pos + 7)
+        elseif cpu_thread == 2 then
+
+            size_datablock_bytes = blocks[2*count_i][2]
+            num_ec_codewords = blocks[2*count_i][1] - blocks[2*count_i][2]
+            cpty_ec_bits = cpty_ec_bits + num_ec_codewords * 8
+            datablocks[#datablocks + 1] = string.sub(data_raw, pos * 8 + 1,( pos + size_datablock_bytes)*8)
+
+            ------------------------------------------------------
+            -- begin EC calculation
+            if type(data_raw)=="string" then
+              mp = convert_bitstring_to_bytes(data_raw)
+            end
+
+            len_message = #mp
+            highest_exponent = len_message + num_ec_codewords - 1
+
+            -- create message shifted to left (highest exponent)
+            for i=1,len_message do
+                mp_int[highest_exponent - i + 1] = mp[i]
+            end
+            for i=1,highest_exponent - len_message do
+                mp_int[i] = 0
+            end
+            mp_int[0] = 0
+
+            mp_alpha = convert_to_alpha(mp_int)
+
+            cpu_thread = 3       
+        elseif cpu_thread == 3 then
+            ------------------------------------------------------
+            -- loop EC calculation
+
+            gp_alpha = get_generator_polynominal_adjusted(num_ec_codewords,highest_exponent)
+
+            -- Multiply generator polynomial by first coefficient of the above polynomial
+
+            -- take the highest exponent from the message polynom (alpha) and add
+            -- it to the generator polynom
+            local exp = mp_alpha[highest_exponent]
+            for i=highest_exponent,highest_exponent - num_ec_codewords,-1 do
+                if gp_alpha[i] + exp > 255 then
+                    gp_alpha[i] = math.fmod(gp_alpha[i] + exp,255)
+                else
+                    gp_alpha[i] = gp_alpha[i] + exp
                 end
             end
-            pos = pos + 8
-        until #arranged_data == #data_raw
-        -- ec
-        local arranged_ec = ""
-        pos = 1
-        repeat
-            for i=1,#local_ecblocks do
-                if pos < #local_ecblocks[i] then
-                    arranged_ec = arranged_ec .. string.sub(local_ecblocks[i],pos, pos + 7)
+            for i=highest_exponent - num_ec_codewords - 1,0,-1 do
+                gp_alpha[i] = 0
+            end
+
+            gp_int = convert_to_int(gp_alpha)
+            mp_int = convert_to_int(mp_alpha)
+
+
+            tmp = {}
+            for i=highest_exponent,0,-1 do
+                tmp[i] = bit_xor(gp_int[i],mp_int[i])
+            end
+            -- remove leading 0's
+            he = highest_exponent
+            for i=he,0,-1 do
+                -- We need to stop if the length of the codeword is matched
+                if i < num_ec_codewords then break end
+                if tmp[i] == 0 then
+                    tmp[i] = nil
+                    highest_exponent = highest_exponent - 1
+                else
+                    break
                 end
             end
-            pos = pos + 8
-        until #arranged_ec == cpty_ec_bits
-        arranged_data = arranged_data .. arranged_ec
-        if math.fmod(#arranged_data,8) ~= 0 then
-            print(string.format("Arranged data %% 8 != 0: data length = %d, mod 8 = %d",#arranged_data, math.fmod(#arranged_data,8)))
-            cpu_thread = -1
-            return
-        end
-        data_raw = arranged_data .. string.rep("0",remainder[version])
-        
-        
-        
-        cpu_thread = 6
-    elseif cpu_thread == 6 then
-        ------------------------------------------------------
-        -- begin generate pattern
-        pattern = prepare_matrix_with_mask(version,ec_level,mask)  
-        
-        dir = "up"
-        byte_number = 0
-        freePos_x,freePos_y = #pattern,#pattern
-        
-        count_j = 1 --load counter for loop
+            mp_int = tmp
+            mp_alpha = convert_to_alpha(mp_int)
 
-        cpu_thread = 7
-    elseif cpu_thread == 7 then
 
-    
-        if count_j >= #data_raw then
-            -- counter finish, break
-            cpu_thread = 10  
-        else
-            -- count and execute cpu_thread6 again
-            local byte = string.sub(data_raw,count_j,count_j+7)
-            byte_number = byte_number + 1
-                positions,freePos_x,freePos_y,dir = get_next_free_positions(pattern,freePos_x,freePos_y,dir,byte,mask)
-                for i=1,#byte do
-                    local _x,_y,m
-                    _x = positions[i][1]
-                    _y = positions[i][2]
-                    m = get_pixel_with_mask(mask,_x,_y,string.sub(byte,i,i))
-                    pattern[_x][_y] = m
+            if highest_exponent < num_ec_codewords then
+                cpu_thread = 4
+            end
+        elseif cpu_thread == 4 then
+            ------------------------------------------------------
+            -- finish EC calculation
+
+            local ret = {}
+
+            -- reverse data
+            for i=#mp_int,0,-1 do
+                ret[#ret + 1] = mp_int[i]
+            end
+
+            local tmp_str = ""
+            for x=1,#ret do
+                tmp_str = tmp_str .. binary(ret[x],8)
+            end
+
+            local_ecblocks[#local_ecblocks + 1] = tmp_str
+            pos = pos + size_datablock_bytes
+            count = count + 1
+
+
+            -- check for loop
+            if count_j==blocks[2*count_i - 1] then
+                count_j=1
+            else
+                cpu_thread = 2
+                count_j=count_j+1
+                return
+            end
+
+            if count_i==#blocks/2 then
+                cpu_thread = 5
+            else
+                cpu_thread = 2
+                count_i=count_i+1
+            end        
+        elseif cpu_thread == 5 then
+            ------------------------------------------------------
+            -- finish arrange data
+
+            local arranged_data = ""
+            pos = 1
+            repeat
+                for i=1,#datablocks do
+                    if pos < #datablocks[i] then
+                        arranged_data = arranged_data .. string.sub(datablocks[i],pos, pos + 7)
+                    end
                 end
-            count_j = count_j + 8 
-        end    
-    end
+                pos = pos + 8
+            until #arranged_data == #data_raw
+            -- ec
+            local arranged_ec = ""
+            pos = 1
+            repeat
+                for i=1,#local_ecblocks do
+                    if pos < #local_ecblocks[i] then
+                        arranged_ec = arranged_ec .. string.sub(local_ecblocks[i],pos, pos + 7)
+                    end
+                end
+                pos = pos + 8
+            until #arranged_ec == cpty_ec_bits
+            arranged_data = arranged_data .. arranged_ec
+            if math.fmod(#arranged_data,8) ~= 0 then
+                print(string.format("Arranged data %% 8 != 0: data length = %d, mod 8 = %d",#arranged_data, math.fmod(#arranged_data,8)))
+                cpu_thread = -1
+                return
+            end
+            data_raw = arranged_data .. string.rep("0",remainder[version])
+
+
+
+            cpu_thread = 6
+        elseif cpu_thread == 6 then
+            ------------------------------------------------------
+            -- begin generate pattern
+            pattern = prepare_matrix_with_mask(version,ec_level,mask)  
+
+            dir = "up"
+            byte_number = 0
+            freePos_x,freePos_y = #pattern,#pattern
+
+            count_j = 1 --load counter for loop
+
+            cpu_thread = 7
+        elseif cpu_thread == 7 then
+
+
+            if count_j >= #data_raw then
+                -- counter finish, break
+
+                ------------------------------------------------------
+                -- finish generate QR-Code
+                print("QR-Code has been created:")
+                print(str)
+                cpu_thread = 10  
+            else
+                -- count and execute cpu_thread6 again
+                local byte = string.sub(data_raw,count_j,count_j+7)
+                byte_number = byte_number + 1
+                    positions,freePos_x,freePos_y,dir = get_next_free_positions(pattern,freePos_x,freePos_y,dir,byte,mask)
+                    for i=1,#byte do
+                        local _x,_y,m
+                        _x = positions[i][1]
+                        _y = positions[i][2]
+                        m = get_pixel_with_mask(mask,_x,_y,string.sub(byte,i,i))
+                        pattern[_x][_y] = m
+                    end
+                count_j = count_j + 8 
+            end    
+        end
+        cpu_usage = system.getCPU()
+        if cpu_thread==0 or cpu_thread==10 then
+            break
+        end
+    until cpu_usage > 25    
 end
 
 -------------------------------------------------------------------------------------    
-return {init=init,loop=loop,author="M.Lehmann",version="1.0",name="GPS to QR-Code"}
+return {init=init,loop=loop,author="M.Lehmann",version="1.1",name="GPS to QR-Code"}
