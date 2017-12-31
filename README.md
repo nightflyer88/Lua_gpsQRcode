@@ -10,12 +10,8 @@ Da die App nur im "Notfall" benötigt wird, muss die App nicht zwingend
 im jeweiligen Modell aktiv sein. Es reicht wenn die App einfach im 
 Sender gespeichert ist, und bei bedarf aktiviert wird.
 
-
-Installation:
-- kopiere die Datei gpsQRcode.lc und den Ordner /gpsQRcode in den /Apps Ordner
+Installation: kopiere die Datei gpsQRcode.lc und den Ordner /gpsQRcode in den /Apps Ordner im Sender
 
 ![screen001](https://raw.githubusercontent.com/nightflyer88/Lua_gpsQRcode/master/img/Screen001.bmp)
 ![screen002](https://raw.githubusercontent.com/nightflyer88/Lua_gpsQRcode/master/img/Screen002.bmp)
 ![screen003](https://raw.githubusercontent.com/nightflyer88/Lua_gpsQRcode/master/img/Screen003.bmp)
-
-Copyright (c) 2017 by M.Lehmann / QR-Code Generator Lib Copyright (c) 2012, Patrick Gundlach
