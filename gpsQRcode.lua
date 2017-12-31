@@ -20,6 +20,7 @@ Copyright (c) 2017 by M.Lehmann
 QR-Code Generator Lib Copyright (c) 2012, Patrick Gundlach
 
 Verionen:
+V1.1    31.12.17    URL angepasst, Speicheroptimierung, CPU- & Speicheranzeige, Anzeige des Berschnungsfortschritts
 V1.0    28.12.17    Erstversion
 
 
@@ -30,17 +31,20 @@ V1.0    28.12.17    Erstversion
 
 ----------------------------------------------------------------------
 -- Locals for the application
+local appVersion = "1.1"
+local test = false   --enable for testdata
+
 local lang
 local key
 local gpsPosValid=0
 local cpu_usage=0
+local max_progress=130
+local current_progress=0
 
 ----------------------------------------------------------------------
 -- Locals for generating QR-code
 local cpu_thread = 0
-local str = ""  -- string to encode
---local str = "TEST"
-
+local str = "www.google.com/maps?q=46.979571,8.254501&t=h"  -- string to encode
     
 local version   -- qrcode size
 local mode      -- Text mode: 1 = numeric, 2 = Ascii, 4 = binary 
@@ -1407,6 +1411,15 @@ local function qrcode( str, ec_level, mode )
 end--]]
 
 
+-------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------
+--      functions for JETI app
+--
+-------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------
+
+
+
 ----------------------------------------------------------------------
 -- Read translations
 local function setLanguage()
@@ -1439,6 +1452,7 @@ local function printQRcode()
     local width, height=310,126
     
     if cpu_thread == 0 then
+        current_progress=0
         -- search GPS-Sensor 
         local posList={}
         local sensList={}
@@ -1461,19 +1475,25 @@ local function printQRcode()
                 sensList[#sensList + 1] = string.format("%s%.6f", neswDez[sensor.decimals+1], degs)            
             end
         end
-        if #sensList >0 then
-            lcd.drawText (20, 20, string.format("%s",lang.gpsPosFound), FONT_BOLD)
-            lcd.drawText (20, 40, posList[1], FONT_NORMAL)
-            lcd.drawText (20, 60, posList[2], FONT_NORMAL)
-            lcd.drawText (20, 90, string.format("%s",lang.googleLink).." >>", FONT_MINI)
-            str = "www.google.com/maps?q=".. sensList[1]..",".. sensList[2].."&t=h"
-            --str = "www.google.com/maps?q=46.979571,8.254501&t=h"
+        if test==false then
+            if #sensList >0 then
+                lcd.drawText (20, 20, string.format("%s",lang.gpsPosFound), FONT_BOLD)
+                lcd.drawText (20, 40, posList[1], FONT_NORMAL)
+                lcd.drawText (20, 60, posList[2], FONT_NORMAL)
+                lcd.drawText (20, 90, string.format("%s",lang.googleLink).." >>", FONT_MINI)
+                str = "www.google.com/maps?q=".. sensList[1]..",".. sensList[2].."&t=h"
+                gpsPosValid=1
+                form.setButton(4,":forward",ENABLED)
+            else
+                lcd.drawText (20, 50, string.format("%s",lang.NOgpsPosFound), FONT_NORMAL)
+                gpsPosValid=0
+            end
+        else
+            lcd.drawText (20, 50, "Test mode", FONT_NORMAL)
             gpsPosValid=1
             form.setButton(4,":forward",ENABLED)
-        else
-            lcd.drawText (20, 50, string.format("%s",lang.NOgpsPosFound), FONT_NORMAL)
-            gpsPosValid=0
         end
+        cpu_usage = system.getCPU()
     elseif cpu_thread == 10 then 
         -- if finish calculation qr-code
         local pixelSize = 4
@@ -1493,14 +1513,20 @@ local function printQRcode()
     elseif cpu_thread == -1 then
         -- Creat QR-Code failed !
         lcd.drawText (20, 50, string.format("%s",lang.creatQRcodeFailed), FONT_NORMAL)
+        cpu_usage = system.getCPU()
     elseif cpu_thread >= 1 then 
         -- QR-Code is created
         form.setButton(4,":forward",3) --disable
-        local statusPercent = cpu_thread/8*100
-        local t = string.format("%d", statusPercent )
-        lcd.drawText (40, 50, string.format("%s",lang.creatQRcode).."... ".. t.. "%", FONT_NORMAL)
+        local progress = current_progress/max_progress*100
+        if progress > 100 then
+            progress = 100
+        end
+        lcd.drawText (40, 50, string.format("%s",lang.creatQRcode), FONT_NORMAL)
+        lcd.drawRectangle (40, 70, 170, 10)
+        lcd.drawFilledRectangle(40,70,170/100*progress,10)
+        lcd.drawText (220, 68, string.format("%d", progress ).. "%", FONT_MINI)
     end
-    lcd.drawText (80, 132, "CPU:".. cpu_usage.."%  Memory: ".. string.format("%.4f",collectgarbage("count")).."Kb", FONT_MINI)
+    lcd.drawText (10, 132, "CPU: ".. cpu_usage.."%  MEM: ".. string.format("%.2f",collectgarbage("count")).."Kb  V".. appVersion.." powered by M. Lehmann", FONT_MINI)
 end
 
 -------------------------------------------------------------------------------------
@@ -1539,7 +1565,7 @@ local function loop()
             pos = 0
             cpty_ec_bits = 0
 
-            -- init for loop
+            -- load counter for loop
             count_i=1
             count_j=1
 
@@ -1690,8 +1716,6 @@ local function loop()
             end
             data_raw = arranged_data .. string.rep("0",remainder[version])
 
-
-
             cpu_thread = 6
         elseif cpu_thread == 6 then
             ------------------------------------------------------
@@ -1731,12 +1755,13 @@ local function loop()
                 count_j = count_j + 8 
             end    
         end
-        cpu_usage = system.getCPU()
         if cpu_thread==0 or cpu_thread==10 then
             break
         end
+        cpu_usage = system.getCPU()
+        current_progress=current_progress+1
     until cpu_usage > 25    
 end
 
 -------------------------------------------------------------------------------------    
-return {init=init,loop=loop,author="M.Lehmann",version="1.1",name="GPS to QR-Code"}
+return {init=init,loop=loop,author="M.Lehmann",version=appVersion,name="GPS to QR-Code"}
