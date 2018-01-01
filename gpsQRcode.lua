@@ -1,30 +1,69 @@
 ----------------------------------------------------------------------
 ----------------------------------------------------------------------
---[[
+--####################################################################
 
-GPS to QR-Code LUA-App für Jeti DC/DS24
+--# GPS to QR-Code LUA-App für Jeti DC/DS24
 ----------------------------------------------------------------------
-Die App ist dazu gedacht, anhand der letzten GPS Position das Modell 
-wieder zu finden. 
-Dazu wird die GPS Position in einen GoogleMaps-link
-verpackt und anschliessend in ein QR-Code umgewandelt, und kann danach 
-mit jedem Smartphone gelesen werden. 
+--# English description:
+--# if you've lost your model, this app generates a qr-code with a google-map link 
+--# of the last gps-position. After that, the qr-code can be read with 
+--# any smartphone and displayed on the map.
 
-Einen QR-Code zu erzeugen braucht extrem viel CPU-Leistung und auch Speicher.
-Da die App nur im "Notfall" benötigt wird, muss die App nicht zwingend
-im jeweiligen Modell aktiv sein. Es reicht wenn die App einfach im 
-Sender gespeichert ist, und bei bedarf aktiviert wird.
-
-
-Copyright (c) 2017 by M.Lehmann
-QR-Code Generator Lib Copyright (c) 2012, Patrick Gundlach
-
-Verionen:
-V1.1    31.12.17    URL angepasst, Speicheroptimierung, CPU- & Speicheranzeige, Anzeige des Berschnungsfortschritts
-V1.0    28.12.17    Erstversion
+--# The app takes a lot of memory and CPU power, so it only runs on a DC / DS24.
+--# Since the app is needed only in an "emergency", the app does not necessarily
+--# be active in the respective model. It's enough if the app just in
+--# Transmitter is stored, and if necessary activated.
 
 
-]]--
+--# Deutsche Beschreibung:
+--# Wenn du dein modell verloren hast, generiert diese app einen qr-code mit 
+--# einem google-map link der letzten gps-position. Danach kann der QR-Code 
+--# mit jedem Smartphone gelesen, und auf der Karte dargestellt werden.
+
+--# Die App braucht viel Speicher und CPU-Leistung, daher läuft diese nur auf einer DC/DS24.
+--# Da die App nur im "Notfall" benötigt wird, muss die App nicht zwingend
+--# im jeweiligen Modell aktiv sein. Es reicht wenn die App einfach im 
+--# Sender gespeichert ist, und bei bedarf aktiviert wird.
+
+
+--# Copyright (c) 2017 by M.Lehmann
+--# QR-Code Generator Lib Copyright (c) 2012, Patrick Gundlach
+
+--# Versionen:
+--# V1.1    31.12.17    URL angepasst, Speicheroptimierung, CPU- & Speicheranzeige, Anzeige des Berschnungsfortschritts
+--# V1.0    28.12.17    Erstversion
+
+--####################################################################
+----------------------------------------------------------------------
+
+--- The GPS to QR-Code LUA-App is licensed under the 3-clause BSD license (aka "new BSD")
+--- To get in contact with the author, mail to <mlehmann@mgkulm.ch>.
+---
+-- Copyright (c) 2017, Michael Lehmann
+-- All rights reserved.
+--
+-- Redistribution and use in source and binary forms, with or without
+-- modification, are permitted provided that the following conditions are met:
+--	 * Redistributions of source code must retain the above copyright
+--	   notice, this list of conditions and the following disclaimer.
+--	 * Redistributions in binary form must reproduce the above copyright
+--	   notice, this list of conditions and the following disclaimer in the
+--	   documentation and/or other materials provided with the distribution.
+--	 * Neither the name of the <organization> nor the
+--	   names of its contributors may be used to endorse or promote products
+--	   derived from this software without specific prior written permission.
+--
+-- THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+-- ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+-- WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+-- DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+-- DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+-- (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+-- LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+-- ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+-- (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+-- SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 ----------------------------------------------------------------------
 ----------------------------------------------------------------------
 
@@ -83,6 +122,9 @@ local byte_number = 0
 
 -------------------------------------------------------------------------------------
 -------------------------------------------------------------------------------------
+-- QR-Code library
+-------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------
 
 --- The qrcode library is licensed under the 3-clause BSD license (aka "new BSD")
 --- To get in contact with the author, mail to <gundlach@speedata.de>.
@@ -119,10 +161,10 @@ local byte_number = 0
 --- The steps to generate the qrcode, assuming we already have the codeword:
 ---
 --- 1. Determine version, ec level and mode (=encoding) for codeword
---- 1. Encode data
---- 1. Arrange data and calculate error correction code
---- 1. Generate 8 matrices with different masks and calculate the penalty
---- 1. Return qrcode with least penalty
+--- 2. Encode data
+--- 3. Arrange data and calculate error correction code
+--- 4. Generate 8 matrices with different masks and calculate the penalty
+--- 5. Return qrcode with least penalty
 ---
 --- Each step is of course more or less complex and needs further description
 
