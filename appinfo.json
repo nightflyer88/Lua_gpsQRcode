@@ -4,11 +4,11 @@
     "description": "https://raw.githubusercontent.com/nightflyer88/Lua_gpsQRcode/master/README.md",
     "sourceFile": [
       "https://github.com/nightflyer88/Lua_gpsQRcode/blob/master/gpsQRcode.lc?raw=true",
-      "https://raw.githubusercontent.com/nightflyer88/Lua_gpsQRcode/master/gpsQRcode/gpsQRcode.jsn",
+      "https://raw.githubusercontent.com/nightflyer88/Lua_gpsQRcode/master/gpsQRcode/gpsQRcode.jsn"
     ],
     "destinationPath": [
       "/Apps",
-      "/Apps/gpsQRcode",
+      "/Apps/gpsQRcode"
     ]
   }
 }
