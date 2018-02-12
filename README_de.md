@@ -1,7 +1,7 @@
 # GPS to QR-Code
 
 Wenn Du dein Modell verloren hast, generiert diese App einen QR-Code mit 
-einem Google-Map link der letzten gps-position. Danach kann der QR-Code 
+einem Google-Map link der letzten GPS-Position. Danach kann der QR-Code 
 mit jedem Smartphone gelesen, und auf der Karte dargestellt werden.
 
 Die App braucht viel Speicher und CPU-Leistung, daher läuft diese nur auf einer DC/DS24.
