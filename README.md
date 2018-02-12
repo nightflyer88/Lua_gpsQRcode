@@ -1,32 +1,44 @@
 # LUA GPS to QR-Code
+
 ### English description:
-if you've lost your model, this app generates a qr-code with a google-map link 
-of the last gps-position. After that, the qr-code can be read with 
+
+If you've lost your model, this app generates a QR-code with a google-map link 
+of the last GPS-position. After that, the QR-code can be read with 
 any smartphone and displayed on the map.
 
-The app takes a lot of memory and CPU power, so it only runs on a DC / DS24.
+The app takes a lot of memory and CPU power, so it only runs on a DC/DS24.
 Since the app is needed only in an "emergency", the app does not necessarily
-be active in the respective model. It's enough if the app just in
-Transmitter is stored, and if necessary activated.
+be active in the model. It's enough if the app just in transmitter is stored, 
+and if necessary activated.
 
 #### Installation: 
-copy the files in the /Apps folder in the transmitter:
+
+Download the [Jeti App Manager](https://github.com/nightflyer88/JetiAppManager/releases), the app is already included,
+and can be easily installed with one click.
+
+Or on top click **Clone or download** and save as **ZIP**, and manually copy the following files and folders to the **/Apps** folder on the transmitter:
 - /gpsQRcode
 - gpsQRcode.lc
 
 
+
 ### Deutsche Beschreibung:
-Wenn du dein modell verloren hast, generiert diese app einen qr-code mit 
-einem google-map link der letzten gps-position. Danach kann der QR-Code 
+
+Wenn Du dein Modell verloren hast, generiert diese App einen QR-Code mit 
+einem Google-Map link der letzten GPS-Position. Danach kann der QR-Code 
 mit jedem Smartphone gelesen, und auf der Karte dargestellt werden.
 
 Die App braucht viel Speicher und CPU-Leistung, daher läuft diese nur auf einer DC/DS24.
 Da die App nur im "Notfall" benötigt wird, muss die App nicht zwingend
 im jeweiligen Modell aktiv sein. Es reicht wenn die App einfach im 
-Sender gespeichert ist, und bei bedarf aktiviert wird.
+Sender gespeichert ist, und bei Bedarf aktiviert wird.
 
-#### Installation: 
-kopiere die Dateien in den /Apps Ordner im Sender:
+#### Installation:
+ 
+Lade den [Jeti App Manager](https://github.com/nightflyer88/JetiAppManager/releases) herunter, die App ist bereits enthalten, 
+und kann bequem mit einem klick installiert werden.
+
+Oder oben auf **Clone or download** und als **ZIP** speichern, und die folgenden Dateien und Ordner manuell in den Ordner **/Apps** auf den Sender kopieren:
 - /gpsQRcode
 - gpsQRcode.lc
 
