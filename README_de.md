@@ -13,3 +13,10 @@ Sender gespeichert ist, und bei Bedarf aktiviert wird.
 ![screen002](https://raw.githubusercontent.com/nightflyer88/Lua_gpsQRcode/master/img/Screen002.bmp)
 ![screen003](https://raw.githubusercontent.com/nightflyer88/Lua_gpsQRcode/master/img/Screen003.bmp)
 ![iphone](https://raw.githubusercontent.com/nightflyer88/Lua_gpsQRcode/master/img/iPhone.png)
+
+```
+Versionen:
+V1.2 22.04.18 Lat/Lon Position wurde bei einigen Sensoren in der falschen Reienfolge angezeigt. Wenn der GPS Sensor den Fix verliert, wird die letzte bekannte Position angezeigt 
+V1.1 29.12.17 GPS-Format nach Dezimalgrad geändert, div. Optimierungen
+V1.0 28.12.17 Erstversion V1.0
+```

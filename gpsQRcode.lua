@@ -26,12 +26,18 @@
 --# Sender gespeichert ist, und bei bedarf aktiviert wird.
 
 
---# Copyright (c) 2017 by M.Lehmann
+--# Copyright (c) 2017-2018 by M.Lehmann
 --# QR-Code Generator Lib Copyright (c) 2012, Patrick Gundlach
 
+--####################################################################
+
+
 --# Versionen:
+--# V1.2    22.04.18    Lat/Lon Position wurde bei einigen Sensoren in der falschen Reienfolge angezeigt
+--#                     Wenn der GPS Sensor den Fix verliert, wird die letzte bekannte Position angezeigt 
 --# V1.1    31.12.17    URL angepasst, Speicheroptimierung, CPU- & Speicheranzeige, Anzeige des Berschnungsfortschritts
 --# V1.0    28.12.17    Erstversion
+
 
 --####################################################################
 ----------------------------------------------------------------------
@@ -70,12 +76,14 @@
 
 ----------------------------------------------------------------------
 -- Locals for the application
-local appVersion = "1.1"
+local appVersion = "1.2"
 local test = false   --enable for testdata
 
 local lang
 local key
 local gpsPosValid=0
+local posList={}
+local sensList={}
 local cpu_usage=0
 local max_progress=130
 local current_progress=0
@@ -1496,8 +1504,6 @@ local function printQRcode()
     if cpu_thread == 0 then
         current_progress=0
         -- search GPS-Sensor 
-        local posList={}
-        local sensList={}
         local sensors = system.getSensors() 
         for i,sensor in ipairs(sensors) do
             if sensor.type == 9 then
@@ -1506,15 +1512,16 @@ local function printQRcode()
                     break
                 end
                 local neswAscii = {"N", "E", "S", "W"}
+                local posTable = {1,2,1,2}
                 local neswDez = {"", "", "-", "-"}
                 local minutes = (sensor.valGPS & 0xFFFF) * 0.001 
                 local degs = (sensor.valGPS >> 16) & 0xFF
                 -- format position to display on screen
                 local t = string.format("%s = %s' %d°%f", sensor.label, neswAscii[sensor.decimals+1],degs, minutes)
-                posList[#posList + 1] = string.sub(t,1,string.len(t)-3)
+                posList[posTable[sensor.decimals+1]] = string.sub(t,1,string.len(t)-3)
                 -- format position for google-link
                 degs = degs + (minutes*1/60) -- convert to decimal degree
-                sensList[#sensList + 1] = string.format("%s%.6f", neswDez[sensor.decimals+1], degs)            
+                sensList[posTable[sensor.decimals+1]] = string.format("%s%.6f", neswDez[sensor.decimals+1], degs)            
             end
         end
         if test==false then
