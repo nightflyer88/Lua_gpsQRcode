@@ -33,6 +33,7 @@
 
 
 --# Versionen:
+--# V1.3    12.05.18    Log Dateien können eingelesen werden, es wird automatisch nach der letzten GPS Position gesucht
 --# V1.2    22.04.18    Lat/Lon Position wurde bei einigen Sensoren in der falschen Reienfolge angezeigt
 --#                     Wenn der GPS Sensor den Fix verliert, wird die letzte bekannte Position angezeigt 
 --# V1.1    31.12.17    URL angepasst, Speicheroptimierung, CPU- & Speicheranzeige, Anzeige des Berschnungsfortschritts
@@ -76,8 +77,17 @@
 
 ----------------------------------------------------------------------
 -- Locals for the application
-local appVersion = "1.2"
+local appVersion = "1.3"
+local appName = "GPS to QR-Code"
 local test = false   --enable for testdata
+
+local pathFileName
+local logFile
+local logFileSize
+local logFileByteCount
+local logGPSsensor
+local sensors = {}
+local linecount = 0
 
 local lang
 local key
@@ -85,6 +95,7 @@ local gpsPosValid=0
 local posList={}
 local sensList={}
 local cpu_usage=0
+local min_cpu_usage=25
 local max_progress=130
 local current_progress=0
 
@@ -124,7 +135,7 @@ local mp_int,mp_alpha = {},{}
 local pattern
 local penalty
 local freePos_x,freePos_y,positions
-local dir = "up"
+local direction = "up"
 local byte_number = 0
 
 
@@ -1092,13 +1103,14 @@ local function add_typeinfo_to_matrix( matrix,ec_level,mask )
 end
 
 -- Bits for version information 7-40
-local version_information = {"001010010011111000", "000111101101000100", "100110010101100100","011001011001010100",
-  "011011111101110100", "001000110111001100", "111000100001101100", "010110000011011100", "000101001001111100",
-  "000111101101000010", "010111010001100010", "111010000101010010", "001001100101110010", "011001011001001010",
-  "011000001011101010", "100100110001011010", "000110111111111010", "001000110111000110", "000100001111100110",
-  "110101011111010110", "000001110001110110", "010110000011001110", "001111110011101110", "101011101011011110",
-  "000000101001111110", "101010111001000001", "000001111011100001", "010111010001010001", "011111001111110001",
-  "110100001101001001", "001110100001101001", "001001100101011001", "010000010101111001", "100101100011000101" }
+-- The reversed strings from https://www.thonky.com/qr-code-tutorial/format-version-tables
+local version_information = {"001010010011111000", "001111011010000100", "100110010101100100", "110010110010010100",
+  "011011111101110100", "010001101110001100", "111000100001101100", "101100000110011100", "000101001001111100",
+  "000111101101000010", "101110100010100010", "111010000101010010", "010011001010110010", "011001011001001010",
+  "110000010110101010", "100100110001011010", "001101111110111010", "001000110111000110", "100001111000100110",
+  "110101011111010110", "011100010000110110", "010110000011001110", "111111001100101110", "101011101011011110",
+  "000010100100111110", "101010111001000001", "000011110110100001", "010111010001010001", "111110011110110001",
+  "110100001101001001", "011101000010101001", "001001100101011001", "100000101010111001", "100101100011000101" }
 
 -- Versions 7 and above need two bitfields with version information added to the code
 local function add_version_information(matrix,version)
@@ -1205,7 +1217,7 @@ end
 -- We need up to 8 positions in the matrix. Only the last few bits may be less then 8.
 -- The function returns a table of (up to) 8 entries with subtables where
 -- the x coordinate is the first and the y coordinate is the second entry.
-local function get_next_free_positions(matrix,x,y,dir,byte)
+local function get_next_free_positions(matrix,x,y,direction,byte)
 	local ret = {}
 	local count = 1
 	local mode = "right"
@@ -1218,7 +1230,7 @@ local function get_next_free_positions(matrix,x,y,dir,byte)
 			ret[#ret + 1] = {x-1,y}
 			mode = "right"
 			count = count + 1
-			if dir == "up" then
+			if direction == "up" then
 				y = y - 1
 			else
 				y = y + 1
@@ -1226,13 +1238,13 @@ local function get_next_free_positions(matrix,x,y,dir,byte)
 		elseif mode == "right" and matrix[x-1][y] == 0 then
 			ret[#ret + 1] = {x-1,y}
 			count = count + 1
-			if dir == "up" then
+			if direction == "up" then
 				y = y - 1
 			else
 				y = y + 1
 			end
 		else
-			if dir == "up" then
+			if direction == "up" then
 				y = y - 1
 			else
 				y = y + 1
@@ -1242,16 +1254,16 @@ local function get_next_free_positions(matrix,x,y,dir,byte)
 			x = x - 2
 			-- don't overwrite the timing pattern
 			if x == 7 then x = 6 end
-			if dir == "up" then
-				dir = "down"
+			if direction == "up" then
+				direction = "down"
 				y = 1
 			else
-				dir = "up"
+				direction = "up"
 				y = #matrix
 			end
 		end
 	end
-	return ret,x,y,dir
+	return ret,x,y,direction
 end
 
 -- Add the data string (0's and 1's) to the matrix for the given mask.
@@ -1259,12 +1271,12 @@ local function add_data_to_matrix(matrix,data,mask)
 	size = #matrix
 	local x,y,positions
 	local _x,_y,m
-	local dir = "up"
+	local direction = "up"
 	local byte_number = 0
 	x,y = size,size
 	string.gsub(data,".?.?.?.?.?.?.?.?",function ( byte )
 		byte_number = byte_number + 1
-		positions,x,y,dir = get_next_free_positions(matrix,x,y,dir,byte,mask)
+		positions,x,y,direction = get_next_free_positions(matrix,x,y,direction,byte,mask)
 		for i=1,#byte do
 			_x = positions[i][1]
 			_y = positions[i][2]
@@ -1486,64 +1498,159 @@ end
 
 -- Form initialization
 local function initForm(subform)
-    --form.setButton(4,":forward",ENABLED)
+    form.preventDefault()
+    form.setButton(5,"EXIT",ENABLED)
+    formView=subform
+    if subform==1 then
+        -- main screen        
+        form.setTitle(appName)
+        cpu_thread = 0
+        if pathFileName ~= nil then
+            logFile=io.open(pathFileName,"r") 
+            if logFile and string.sub(pathFileName,string.len(pathFileName)-3)==".log" then
+                -- read log file
+                print("load Log file: "..pathFileName.." ("..logFileSize.."bytes)")
+                -- with large files only the last 10Kbytes are searched
+                if logFileSize > 100000 then
+                    io.seek(logFile,logFileSize - 100000)
+                    local firstline = io.readline(logFile)
+                    logFileSize = 100000 - #firstline
+                end
+                logFileByteCount = 0
+                sensors = {}
+                sensList = {}
+                min_cpu_usage=50
+                cpu_thread = 1           
+            end
+        end        
+    elseif subform==2 then
+        -- open log file
+        form.addLabel({label=lang.selectLogFile,font=FONT_BOLD})
+        pathFileName ="Log"
+        form.addRow(2)
+        form.addIcon(":graph",{width=30, enabled = false})
+        form.addLink((function() form.reinit(3) end), {label = "/"..pathFileName})
+        form.setButton(1,"Esc",ENABLED)           
+    elseif subform==3 then
+        -- folder log file
+        form.setTitle(lang.selectFile)
+        form.setButton(1,"Esc",ENABLED)
+        
+        for name, filetype, size in dir(pathFileName) do
+            if string.sub(name,1,1) ~= "." then
+                -- if folder
+                if filetype=="folder" then
+                    form.addRow(2)
+                    form.addIcon(":folder",{width=30, enabled = false})
+                    form.addLink((function() 
+                                    pathFileName = pathFileName.."/".. name
+                                    form.reinit(3) 
+                                end),
+                    {label = string.sub(name,1,4).."/".. string.sub(name,5,6).."/".. string.sub(name,7,8)})
+                end
+                -- if log file
+                if filetype=="file" then
+                    local file = io.open(pathFileName.."/".. name,"r")            
+                    form.addRow(4)
+                    form.addIcon(":graph",{width=30, enabled = false})
+                    form.addLabel({label=string.gsub(string.sub(name,1,string.len(name)-4), "-", ":"),width=67})
+                    form.addLink((function() 
+                                    pathFileName = pathFileName.."/".. name
+                                    logFileSize = size
+                                    form.reinit(1) 
+                                end),
+                    {label = string.sub(io.readline(file),3),width=150})
+                    form.addLabel({label=string.format("%.1f",(size/1000)).."KB",alignRight=true})
+                    io.close(file)
+                end
+            end
+        end 
+    end
 end
 
 -- Latches the current keyCode
 local function keyForm(keyCode)
-    if keyCode==KEY_4 and gpsPosValid==1 then
-        cpu_thread = 1
+    if keyCode==KEY_1 and formView==1 and cpu_thread==0 then
+        -- open log file
+        form.reinit(2)
+    elseif keyCode==KEY_ESC or keyCode==KEY_1 and formView>1 then
+        -- back in open file dialog
+        if string.find(pathFileName, '/', 1, true) then
+            pathFileName = string.sub(pathFileName,1,string.len(pathFileName)-string.find(string.reverse(pathFileName), '/', 1, true))
+            form.reinit(3)
+        else    
+            form.reinit(formView-1)
+        end           
+    elseif keyCode==KEY_4 and gpsPosValid==1 then
+        -- beginn qr-code creat
+        current_progress=0
+        min_cpu_usage=25
+        cpu_thread = 11
     elseif keyCode==KEY_5 then
+        -- exit
+        pathFileName = nil
+        sensors = {}
+        sensList = {}
         cpu_thread = 0
     end
 end
 
-local function printQRcode()
+
+-- print form function
+local function printForm()
     local width, height=310,126
     
     if cpu_thread == 0 then
-        current_progress=0
-        -- search GPS-Sensor 
-        local sensors = system.getSensors() 
-        for i,sensor in ipairs(sensors) do
-            if sensor.type == 9 then
-                -- GPS coordinates
-                if sensor.valGPS==0 then
-                    break
-                end
-                local neswAscii = {"N", "E", "S", "W"}
-                local posTable = {1,2,1,2}
-                local neswDez = {"", "", "-", "-"}
-                local minutes = (sensor.valGPS & 0xFFFF) * 0.001 
-                local degs = (sensor.valGPS >> 16) & 0xFF
-                -- format position to display on screen
-                local t = string.format("%s = %s' %d°%f", sensor.label, neswAscii[sensor.decimals+1],degs, minutes)
-                posList[posTable[sensor.decimals+1]] = string.sub(t,1,string.len(t)-3)
-                -- format position for google-link
-                degs = degs + (minutes*1/60) -- convert to decimal degree
-                sensList[posTable[sensor.decimals+1]] = string.format("%s%.6f", neswDez[sensor.decimals+1], degs)            
+        if formView==1 then         -- main screen
+            -- search GPS-Sensor 
+            form.setButton(1,":folder",ENABLED)
+            if #sensors == 0 then
+                sensors = system.getSensors() 
             end
-        end
-        if test==false then
-            if #sensList >0 then
-                lcd.drawText (20, 20, string.format("%s",lang.gpsPosFound), FONT_BOLD)
-                lcd.drawText (20, 40, posList[1], FONT_NORMAL)
-                lcd.drawText (20, 60, posList[2], FONT_NORMAL)
-                lcd.drawText (20, 90, string.format("%s",lang.googleLink).." >>", FONT_MINI)
-                str = "www.google.com/maps?q=".. sensList[1]..",".. sensList[2].."&t=h"
+            for i,sensor in ipairs(sensors) do
+                if sensor.type == 9 then
+                    -- GPS coordinates
+                    if sensor.valGPS==0 then
+                        break
+                    end
+                    local neswAscii = {"N", "E", "S", "W"}
+                    local posTable = {1,2,1,2}
+                    local neswDez = {"", "", "-", "-"}
+                    local minutes = (sensor.valGPS & 0xFFFF) * 0.001 
+                    local degs = (sensor.valGPS >> 16) & 0xFF
+                    -- format position to display on screen
+                    local t = string.format("%s = %s' %d°%f", sensor.label, neswAscii[sensor.decimals+1],degs, minutes)
+                    posList[posTable[sensor.decimals+1]] = string.sub(t,1,string.len(t)-3)
+                    -- format position for google-link
+                    degs = degs + (minutes*1/60) -- convert to decimal degree
+                    sensList[posTable[sensor.decimals+1]] = string.format("%s%.6f", neswDez[sensor.decimals+1], degs)
+                end
+            end
+            if test==false then
+                if #sensList > 0 then
+                    if pathFileName then
+                        lcd.drawText (20, 20, string.format("%s",lang.gpsPosLogFound), FONT_BOLD)
+                    else
+                        lcd.drawText (20, 20, string.format("%s",lang.gpsPosFound), FONT_BOLD)
+                    end
+                    lcd.drawText (20, 40, posList[1], FONT_NORMAL)
+                    lcd.drawText (20, 60, posList[2], FONT_NORMAL)
+                    lcd.drawText (20, 90, string.format("%s",lang.googleLink).." >>", FONT_MINI)
+                    str = "www.google.com/maps?q=".. sensList[1]..",".. sensList[2].."&t=h"
+                    gpsPosValid=1
+                    form.setButton(4,":forward",ENABLED)
+                else
+                    lcd.drawText (20, 50, string.format("%s",lang.NOgpsPosFound), FONT_NORMAL)
+                    gpsPosValid=0
+                end
+            else
+                lcd.drawText (20, 50, "Test mode", FONT_NORMAL)
                 gpsPosValid=1
                 form.setButton(4,":forward",ENABLED)
-            else
-                lcd.drawText (20, 50, string.format("%s",lang.NOgpsPosFound), FONT_NORMAL)
-                gpsPosValid=0
             end
-        else
-            lcd.drawText (20, 50, "Test mode", FONT_NORMAL)
-            gpsPosValid=1
-            form.setButton(4,":forward",ENABLED)
         end
         cpu_usage = system.getCPU()
-    elseif cpu_thread == 10 then 
+    elseif cpu_thread == 20 then 
         -- if finish calculation qr-code
         local pixelSize = 4
 
@@ -1565,17 +1672,30 @@ local function printQRcode()
         cpu_usage = system.getCPU()
     elseif cpu_thread >= 1 then 
         -- QR-Code is created
+        form.setButton(1,":folder",3) --disable
         form.setButton(4,":forward",3) --disable
-        local progress = current_progress/max_progress*100
+        local textLabel = ""
+        local progress = 0
+        if cpu_thread == 1 then
+            -- progress load log file
+            textLabel = string.format("%s",lang.loadLogFile)
+            progress = logFileByteCount/logFileSize*100
+        else
+            -- progress QR-code
+            textLabel = string.format("%s",lang.creatQRcode)
+            progress = current_progress/max_progress*100
+        end
         if progress > 100 then
             progress = 100
         end
-        lcd.drawText (40, 50, string.format("%s",lang.creatQRcode), FONT_NORMAL)
+        lcd.drawText (40, 50, textLabel, FONT_NORMAL)
         lcd.drawRectangle (40, 70, 170, 10)
         lcd.drawFilledRectangle(40,70,170/100*progress,10)
         lcd.drawText (220, 68, string.format("%d", progress ).. "%", FONT_MINI)
     end
-    lcd.drawText (10, 132, "CPU: ".. cpu_usage.."%  MEM: ".. string.format("%.2f",collectgarbage("count")).."Kb  V".. appVersion.." powered by M. Lehmann", FONT_MINI)
+    if formView==1 then
+        lcd.drawText (10, 132, "CPU: ".. cpu_usage.."%  MEM: ".. string.format("%.2f",collectgarbage("count")).."Kb  V".. appVersion.." powered by M. Lehmann", FONT_MINI)
+    end
 end
 
 -------------------------------------------------------------------------------------
@@ -1583,7 +1703,7 @@ end
 
 local function init()
     setLanguage()
-    system.registerForm(1,MENU_APPS,"GPS to QR-Code",initForm, keyForm,printQRcode)
+    system.registerForm(1,MENU_APPS,"GPS to QR-Code",initForm, keyForm,printForm)
 end
 
 
@@ -1591,8 +1711,36 @@ end
 -- Loop
 
 local function loop()
-    repeat    
+    repeat            
         if cpu_thread == 1 then
+            -- read lines in log file
+            local dataElements = {}
+            local line = io.readline(logFile)
+            if line then
+                logFileByteCount = logFileByteCount + #line
+                for element in string.gmatch(line, '([^;]+)') do
+                    table.insert(dataElements,element)
+                end
+                local nameText = {"Latitude", "Longitude", "Latitude", "Longitude"}
+                local posTable = {1,2,1,2}
+                
+                for i=0,4,4 do
+                    if dataElements[i+4]=="9" then
+                        local logGPSvalue = {}
+                        logGPSvalue.type = 9
+                        logGPSvalue.decimals = dataElements[i+5]
+                        logGPSvalue.valGPS = dataElements[i+6]
+                        logGPSvalue.label = nameText[logGPSvalue.decimals+1]
+                        sensors[posTable[logGPSvalue.decimals+1]] = logGPSvalue
+                    end
+                end
+            else
+                cpu_thread = 2
+            end
+        elseif cpu_thread == 2 then
+            io.close(logFile)
+            cpu_thread = 0
+        elseif cpu_thread == 11 then
 
             datablocks = {}
             local_ecblocks = {}
@@ -1618,8 +1766,8 @@ local function loop()
             count_i=1
             count_j=1
 
-            cpu_thread = 2
-        elseif cpu_thread == 2 then
+            cpu_thread = 12
+        elseif cpu_thread == 12 then
 
             size_datablock_bytes = blocks[2*count_i][2]
             num_ec_codewords = blocks[2*count_i][1] - blocks[2*count_i][2]
@@ -1646,8 +1794,8 @@ local function loop()
 
             mp_alpha = convert_to_alpha(mp_int)
 
-            cpu_thread = 3       
-        elseif cpu_thread == 3 then
+            cpu_thread = 13       
+        elseif cpu_thread == 13 then
             ------------------------------------------------------
             -- loop EC calculation
 
@@ -1694,9 +1842,9 @@ local function loop()
 
 
             if highest_exponent < num_ec_codewords then
-                cpu_thread = 4
+                cpu_thread = 14
             end
-        elseif cpu_thread == 4 then
+        elseif cpu_thread == 14 then
             ------------------------------------------------------
             -- finish EC calculation
 
@@ -1721,18 +1869,18 @@ local function loop()
             if count_j==blocks[2*count_i - 1] then
                 count_j=1
             else
-                cpu_thread = 2
+                cpu_thread = 12
                 count_j=count_j+1
                 return
             end
 
             if count_i==#blocks/2 then
-                cpu_thread = 5
+                cpu_thread = 15
             else
-                cpu_thread = 2
+                cpu_thread = 12
                 count_i=count_i+1
             end        
-        elseif cpu_thread == 5 then
+        elseif cpu_thread == 15 then
             ------------------------------------------------------
             -- finish arrange data
 
@@ -1765,20 +1913,20 @@ local function loop()
             end
             data_raw = arranged_data .. string.rep("0",remainder[version])
 
-            cpu_thread = 6
-        elseif cpu_thread == 6 then
+            cpu_thread = 16
+        elseif cpu_thread == 16 then
             ------------------------------------------------------
             -- begin generate pattern
             pattern = prepare_matrix_with_mask(version,ec_level,mask)  
 
-            dir = "up"
+            direction = "up"
             byte_number = 0
             freePos_x,freePos_y = #pattern,#pattern
 
             count_j = 1 --load counter for loop
 
-            cpu_thread = 7
-        elseif cpu_thread == 7 then
+            cpu_thread = 17
+        elseif cpu_thread == 17 then
 
 
             if count_j >= #data_raw then
@@ -1786,14 +1934,14 @@ local function loop()
 
                 ------------------------------------------------------
                 -- finish generate QR-Code
-                print("QR-Code has been created:")
+                print("QR-Code is created:")
                 print(str)
-                cpu_thread = 10  
+                cpu_thread = 20  
             else
                 -- count and execute cpu_thread6 again
                 local byte = string.sub(data_raw,count_j,count_j+7)
                 byte_number = byte_number + 1
-                    positions,freePos_x,freePos_y,dir = get_next_free_positions(pattern,freePos_x,freePos_y,dir,byte,mask)
+                    positions,freePos_x,freePos_y,direction = get_next_free_positions(pattern,freePos_x,freePos_y,direction,byte,mask)
                     for i=1,#byte do
                         local _x,_y,m
                         _x = positions[i][1]
@@ -1804,13 +1952,13 @@ local function loop()
                 count_j = count_j + 8 
             end    
         end
-        if cpu_thread==0 or cpu_thread==10 then
+        if cpu_thread==0 or cpu_thread==20 then
             break
         end
         cpu_usage = system.getCPU()
         current_progress=current_progress+1
-    until cpu_usage > 25    
+    until cpu_usage > min_cpu_usage    
 end
 
 -------------------------------------------------------------------------------------    
-return {init=init,loop=loop,author="M.Lehmann",version=appVersion,name="GPS to QR-Code"}
+return {init=init,loop=loop,author="M.Lehmann",version=appVersion,name=appName}
