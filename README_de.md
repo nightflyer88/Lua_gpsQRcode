@@ -16,6 +16,7 @@ Sender gespeichert ist, und bei Bedarf aktiviert wird.
 
 ```
 Versionen:
+V1.3 12.05.18 Log Dateien können eingelesen werden, es wird automatisch nach der letzten GPS Position gesucht
 V1.2 22.04.18 Lat/Lon Position wurde bei einigen Sensoren in der falschen Reienfolge angezeigt. Wenn der GPS Sensor den Fix verliert, wird die letzte bekannte Position angezeigt 
 V1.1 29.12.17 GPS-Format nach Dezimalgrad geändert, div. Optimierungen
 V1.0 28.12.17 Erstversion V1.0
