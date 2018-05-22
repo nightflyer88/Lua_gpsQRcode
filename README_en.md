@@ -16,6 +16,7 @@ and if necessary activated.
 
 ```
 Version history:
+V1.4 22.05.18 Bug fixed during log file import
 V1.3 12.05.18 Log files can be import, the app automatically searches for the last GPS position
 V1.2 22.04.18 Lat/Lon position was displayed in the wrong sequence for some sensors. When the GPS sensor loses the fix, the last known position is displayed
 V1.1 29.12.17 GPS format changed to decimal degree, various optimizations
