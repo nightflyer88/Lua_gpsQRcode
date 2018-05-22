@@ -33,6 +33,7 @@
 
 
 --# Versionen:
+--# V1.4    22.05.18    Fehler beim Log-Datei Import behoben
 --# V1.3    12.05.18    Log Dateien können eingelesen werden, es wird automatisch nach der letzten GPS Position gesucht
 --# V1.2    22.04.18    Lat/Lon Position wurde bei einigen Sensoren in der falschen Reienfolge angezeigt
 --#                     Wenn der GPS Sensor den Fix verliert, wird die letzte bekannte Position angezeigt 
@@ -77,7 +78,7 @@
 
 ----------------------------------------------------------------------
 -- Locals for the application
-local appVersion = "1.3"
+local appVersion = "1.4"
 local appName = "GPS to QR-Code"
 local test = false   --enable for testdata
 
@@ -1627,7 +1628,7 @@ local function printForm()
                 end
             end
             if test==false then
-                if #sensList > 0 then
+                if #sensList==2 then
                     if pathFileName then
                         lcd.drawText (20, 20, string.format("%s",lang.gpsPosLogFound), FONT_BOLD)
                     else
@@ -1724,7 +1725,8 @@ local function loop()
                 local nameText = {"Latitude", "Longitude", "Latitude", "Longitude"}
                 local posTable = {1,2,1,2}
                 
-                for i=0,4,4 do
+                local i=0
+                repeat
                     if dataElements[i+4]=="9" then
                         local logGPSvalue = {}
                         logGPSvalue.type = 9
@@ -1733,7 +1735,8 @@ local function loop()
                         logGPSvalue.label = nameText[logGPSvalue.decimals+1]
                         sensors[posTable[logGPSvalue.decimals+1]] = logGPSvalue
                     end
-                end
+                    i=i+4
+                until i > #dataElements
             else
                 cpu_thread = 2
             end
