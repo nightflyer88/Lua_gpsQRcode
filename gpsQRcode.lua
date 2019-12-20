@@ -33,6 +33,7 @@
 
 
 --# Versionen:
+--# V1.5    20.12.19    kleinere Optimierungen, filebox lib eingebaut
 --# V1.4    22.05.18    Fehler beim Log-Datei Import behoben
 --# V1.3    12.05.18    Log Dateien können eingelesen werden, es wird automatisch nach der letzten GPS Position gesucht
 --# V1.2    22.04.18    Lat/Lon Position wurde bei einigen Sensoren in der falschen Reienfolge angezeigt
@@ -78,12 +79,13 @@
 
 ----------------------------------------------------------------------
 -- Locals for the application
-local appVersion = "1.4"
+local appVersion = "1.5"
 local appName = "GPS to QR-Code"
 local test = false   --enable for testdata
 
-local pathFileName
+local formView
 local logFile
+local logFileName
 local logFileSize
 local logFileByteCount
 local logGPSsensor
@@ -99,6 +101,9 @@ local cpu_usage=0
 local min_cpu_usage=25
 local max_progress=130
 local current_progress=0
+
+-- filebox lib
+local filebox = require("gpsQRcode/filebox")
 
 ----------------------------------------------------------------------
 -- Locals for generating QR-code
@@ -1494,23 +1499,36 @@ local function setLanguage()
     end
 end
 
+----------------------------------------------------------------------
+-- callback functions
+
+local function newLogfile(value)
+    if(value ~= nil)then
+        logFileName = value
+        logFileSize = filebox.getFileSize(value)
+    end
+    form.reinit(1)
+end
+
 -------------------------------------------------------------------------------------
 -- Form function
 
 -- Form initialization
 local function initForm(subform)
-    form.preventDefault()
-    form.setButton(5,"EXIT",ENABLED)
+    filebox.updateform(subform)
+    
     formView=subform
     if subform==1 then
         -- main screen        
         form.setTitle(appName)
+        form.preventDefault()
+        form.setButton(5,"EXIT",ENABLED)
         cpu_thread = 0
-        if pathFileName ~= nil then
-            logFile=io.open(pathFileName,"r") 
-            if logFile and string.sub(pathFileName,string.len(pathFileName)-3)==".log" then
+        if(logFileName ~= nil)then
+            logFile=io.open(logFileName,"r") 
+            if logFile and string.sub(logFileName,string.len(logFileName)-3)==".log" then
                 -- read log file
-                print("load Log file: "..pathFileName.." ("..logFileSize.."bytes)")
+                print("load Log file: "..logFileName.." ("..logFileSize.."bytes)")
                 -- with large files only the last 10Kbytes are searched
                 if logFileSize > 100000 then
                     io.seek(logFile,logFileSize - 100000)
@@ -1524,64 +1542,18 @@ local function initForm(subform)
                 cpu_thread = 1           
             end
         end        
-    elseif subform==2 then
-        -- open log file
-        form.addLabel({label=lang.selectLogFile,font=FONT_BOLD})
-        pathFileName ="Log"
-        form.addRow(2)
-        form.addIcon(":graph",{width=30, enabled = false})
-        form.addLink((function() form.reinit(3) end), {label = "/"..pathFileName})
-        form.setButton(1,"Esc",ENABLED)           
-    elseif subform==3 then
-        -- folder log file
-        form.setTitle(lang.selectFile)
-        form.setButton(1,"Esc",ENABLED)
-        
-        for name, filetype, size in dir(pathFileName) do
-            if string.sub(name,1,1) ~= "." then
-                -- if folder
-                if filetype=="folder" then
-                    form.addRow(2)
-                    form.addIcon(":folder",{width=30, enabled = false})
-                    form.addLink((function() 
-                                    pathFileName = pathFileName.."/".. name
-                                    form.reinit(3) 
-                                end),
-                    {label = string.sub(name,1,4).."/".. string.sub(name,5,6).."/".. string.sub(name,7,8)})
-                end
-                -- if log file
-                if filetype=="file" then
-                    local file = io.open(pathFileName.."/".. name,"r")            
-                    form.addRow(4)
-                    form.addIcon(":graph",{width=30, enabled = false})
-                    form.addLabel({label=string.gsub(string.sub(name,1,string.len(name)-4), "-", ":"),width=67})
-                    form.addLink((function() 
-                                    pathFileName = pathFileName.."/".. name
-                                    logFileSize = size
-                                    form.reinit(1) 
-                                end),
-                    {label = string.sub(io.readline(file),3),width=150})
-                    form.addLabel({label=string.format("%.1f",(size/1000)).."KB",alignRight=true})
-                    io.close(file)
-                end
-            end
-        end 
     end
+    -- get subform id from filebox and put it to application menu flow control
+    formView = filebox.getSubformID() or subform
 end
 
 -- Latches the current keyCode
 local function keyForm(keyCode)
+    filebox.updatekey(formView,keyCode)
+    
     if keyCode==KEY_1 and formView==1 and cpu_thread==0 then
         -- open log file
-        form.reinit(2)
-    elseif keyCode==KEY_ESC or keyCode==KEY_1 and formView>1 then
-        -- back in open file dialog
-        if string.find(pathFileName, '/', 1, true) then
-            pathFileName = string.sub(pathFileName,1,string.len(pathFileName)-string.find(string.reverse(pathFileName), '/', 1, true))
-            form.reinit(3)
-        else    
-            form.reinit(formView-1)
-        end           
+        filebox.openfile(128,lang.selectLogFile,"/log","/log",{"log"},newLogfile,formView)         
     elseif keyCode==KEY_4 and gpsPosValid==1 then
         -- beginn qr-code creat
         current_progress=0
@@ -1589,7 +1561,7 @@ local function keyForm(keyCode)
         cpu_thread = 11
     elseif keyCode==KEY_5 then
         -- exit
-        pathFileName = nil
+        logFileName = nil
         sensors = {}
         sensList = {}
         cpu_thread = 0
@@ -1604,7 +1576,7 @@ local function printForm()
     if cpu_thread == 0 then
         if formView==1 then         -- main screen
             -- search GPS-Sensor 
-            form.setButton(1,":folder",ENABLED)
+            form.setButton(1,":browser",ENABLED)
             if #sensors == 0 then
                 sensors = system.getSensors() 
             end
@@ -1629,7 +1601,7 @@ local function printForm()
             end
             if test==false then
                 if #sensList==2 then
-                    if pathFileName then
+                    if logFileName then
                         lcd.drawText (20, 20, string.format("%s",lang.gpsPosLogFound), FONT_BOLD)
                     else
                         lcd.drawText (20, 20, string.format("%s",lang.gpsPosFound), FONT_BOLD)
