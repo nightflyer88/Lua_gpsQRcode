@@ -1,5 +1,7 @@
 # LUA GPS to QR-Code
 
+[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=R69PMKTCXQBUU&source=url)
+
 ### English description:
 
 If you've lost your model, this app generates a QR-code with a google-map link 
