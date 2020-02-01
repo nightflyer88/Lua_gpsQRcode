@@ -33,6 +33,7 @@
 
 
 --# Versionen:
+--# V1.51   01.02.20    update filebox lib
 --# V1.5    20.12.19    kleinere Optimierungen, filebox lib eingebaut
 --# V1.4    22.05.18    Fehler beim Log-Datei Import behoben
 --# V1.3    12.05.18    Log Dateien können eingelesen werden, es wird automatisch nach der letzten GPS Position gesucht
@@ -79,7 +80,7 @@
 
 ----------------------------------------------------------------------
 -- Locals for the application
-local appVersion = "1.5"
+local appVersion = "1.51"
 local appName = "GPS to QR-Code"
 local test = false   --enable for testdata
 
@@ -1543,17 +1544,17 @@ local function initForm(subform)
             end
         end        
     end
-    -- get subform id from filebox and put it to application menu flow control
-    formView = filebox.getSubformID() or subform
+
+    formView = subform
 end
 
 -- Latches the current keyCode
 local function keyForm(keyCode)
-    filebox.updatekey(formView,keyCode)
+    filebox.updatekey(keyCode)
     
     if keyCode==KEY_1 and formView==1 and cpu_thread==0 then
         -- open log file
-        filebox.openfile(128,lang.selectLogFile,"/log","/log",{"log"},newLogfile,formView)         
+        filebox.openfile(lang.selectLogFile,"/log","/log",{"log"},newLogfile,formView)         
     elseif keyCode==KEY_4 and gpsPosValid==1 then
         -- beginn qr-code creat
         current_progress=0
